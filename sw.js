@@ -1,6 +1,6 @@
 /* Yes Quest Log offline cache: the page works with no signal once it has opened once.
    Pages: network first (so updates arrive), cache when offline. Fonts: cache first. Progress itself lives in the page's storage, not here. */
-const C = 'yesquest-v1', CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const C = 'yesquest-v2', CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
