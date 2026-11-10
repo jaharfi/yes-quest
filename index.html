@@ -285,6 +285,15 @@ details.jday .jb{padding:0 14px 12px}
 .toast b{font-family:var(--display);font-size:20px;display:block;color:var(--epic)}
 .toast span{font-size:14px;color:var(--muted)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.yqx{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+.dare{border-left:3px solid var(--gold);background:var(--surface2);padding:8px 12px;margin:0 0 10px;font-size:16px;overflow-wrap:anywhere}
+.dare i{display:block;font-style:normal;color:var(--muted);font-size:16px;margin-bottom:2px}
+.dare.go{border-left-color:var(--green)}
+#planned .plan{margin:0 0 12px}
+#force .dare{margin:0 0 12px}
+#force > .yqx{margin:0 0 12px}
+#planned .plan .ans{margin:8px 0}
+#planned .yqx{margin:4px 0 0}
 </style>
 </head>
 <body>
@@ -309,6 +318,8 @@ details.jday .jb{padding:0 14px 12px}
     <div class="eyebrow" id="dayline">Day 1</div>
     <h2 id="todayh">Today’s quests</h2>
     <div class="status" id="status"></div>
+    <div id="planned"></div>
+    <div id="force"></div>
     <div class="qlist" id="qlist"></div>
     <div id="clearnote"></div>
   </section>
@@ -649,6 +660,28 @@ const QUESTS = [
 ];
 const QBY = {}; QUESTS.forEach(q => QBY[q.id] = q);
 const QXP = 100, CLEAR_AT = 2, ROLL_H = 3;
+/* "Nothing came up?" dares, one pool per quest (wording by Joe, 10 Nov 2026) */
+const DARES = {
+  yes:['Offer some form of help to a friend, stranger, colleague or housemate where they are almost certain to accept it by saying ‘yes’.',
+       'Message someone you’ve not spoken to for a while to see how the fuck they are going.',
+       'Ask someone if they have plans tonight; if yes then offer to join – if no, suggest some.'],
+  unc:['Start a conversation with a stranger: at training, a barista, someone at the pub/museum/park… painful but that’s the point.',
+       'Give a stranger a compliment and mean it.',
+       'Go somewhere, anywhere, outside the house for an hour – phone stays home.',
+       'Trial BJJ session or open mat at a new gym; if work means time does not allow – casual pass at a new gym. The price is uncomfortable? Unlucky; could’ve ‘Gone First’ yesterday and planned something else.'],
+  chance:['Order one thing you’ve never ordered before.',
+       'Go somewhere in London you’ve been meaning to but haven’t got around to yet.',
+       'Get off two stops early on the way to or back from work; notice something you’d not have witnessed but-for this inconvenience.']
+};
+/* Go First: plan tomorrow's quest today. One a day, so plans alone never clear a day. */
+const GOP = {p1:'What must I do tomorrow, and at what time exactly?', p2:'What might stop me, and how can I ensure it does not?'};
+const FOLLOW_XP = 50;
+function goUsed(k, except){ const d = S.days[k]; return !!(d && d.q && QUESTS.some(q => q.id !== except && d.q[q.id] && d.q[q.id].go)); }
+function planOf(k){
+  const y = S.days[addDays(k, -1)]; if (!y || !y.q) return null;
+  const q = QUESTS.find(q => y.q[q.id] && y.q[q.id].go); return q ? {id:q.id, a:y.q[q.id].a, b:y.q[q.id].b || ''} : null;
+}
+function fBonus(k, id){ const d = S.days[k]; if (!d || !d.f) return 0; const P = planOf(k); return P && (!id || P.id === id) ? FOLLOW_XP : 0; }
 
 const LEVELS = [
   {xp:0, t:'Homebody', s:'The door is shut and the kettle is on.'},
@@ -706,7 +739,7 @@ const isDone = (k, id) => !!(S.days[k] && S.days[k].q && S.days[k].q[id]);
 const doneCount = k => QUESTS.filter(q => isDone(k, q.id)).length;
 const cleared = k => doneCount(k) >= CLEAR_AT;
 const dayKeys = () => Object.keys(S.days).filter(k => /^\d{4}-\d\d-\d\d$/.test(k)).sort();
-function totalXP(){ return dayKeys().reduce((x, k) => x + doneCount(k) * QXP, 0); }
+function totalXP(){ return dayKeys().reduce((x, k) => x + doneCount(k) * QXP + fBonus(k), 0); }
 function streakNow(){
   let k = today(); if (!cleared(k)) k = addDays(k, -1);
   let n = 0; while (cleared(k)) { n++; k = addDays(k, -1); }
@@ -766,28 +799,48 @@ function renderToday(){
   $('qlist').innerHTML = QUESTS.map(q => {
     const done = isDone(t, q.id), ed = editing.has(q.id), open = openRows.has(q.id);
     const ans = done ? day.q[q.id] : null, dr = (day.d && day.d[q.id]) || {};
+    const go = done ? !!ans.go : !!dr.go, P = go ? GOP : q;
     let body;
     if (done && !ed) {
-      body = '<div class="ans"><i>' + esc(q.p1) + '</i><p>' + esc(ans.a) + '</p></div>' +
-        (ans.b ? '<div class="ans"><i>' + esc(q.p2) + '</i><p>' + esc(ans.b) + '</p></div>' : '') +
+      body = (go ? '<div class="dare go"><i>Go First</i>Planned for tomorrow. It shows at the top of Today.</div>' : '') +
+        '<div class="ans"><i>' + esc(P.p1) + '</i><p>' + esc(ans.a) + '</p></div>' +
+        (ans.b ? '<div class="ans"><i>' + esc(P.p2) + '</i><p>' + esc(ans.b) + '</p></div>' : '') +
         '<div class="qact"><button class="btn ghost" type="button" data-edit="' + q.id + '">Edit answer</button>' +
         '<button class="lnk' + (undoArm === q.id ? ' arm' : '') + '" type="button" data-undo="' + q.id + '">' + (undoArm === q.id ? 'Tap again to undo (−100 XP)' : 'Undo quest') + '</button></div>';
     } else {
       const a = ed ? ans.a : (dr.a || ''), b = ed ? (ans.b || '') : (dr.b || '');
-      body = '<div class="field"><label for="a-' + q.id + '">' + esc(q.p1) + '</label><textarea id="a-' + q.id + '" data-q="' + q.id + '" data-f="a" rows="3">' + esc(a) + '</textarea></div>' +
-        '<div class="field"><label for="b-' + q.id + '">' + esc(q.p2) + ' <small>(optional)</small></label><textarea id="b-' + q.id + '" data-q="' + q.id + '" data-f="b" rows="2">' + esc(b) + '</textarea></div>' +
+      let extra = '';
+      if (!ed) {
+        const FH = day.fh && day.fh.id === q.id ? day.fh : null, used = goUsed(t, q.id);
+        if (go) extra = '<div class="dare go"><i>Go First</i>Plan one thing for tomorrow that counts as ' + esc(q.name) + '. Only one quest a day can be done this way.</div>';
+        else if (FH) extra = '<div class="dare"><i>Force my Hand</i>' + esc(DARES[q.id][FH.i]) + '</div>';
+        extra += '<div class="yqx">' + (go ? '<button class="lnk" type="button" data-gooff="' + q.id + '">Back to the quest</button>'
+          : used ? '<span class="hint">Go First used today</span>' : '<button class="btn ghost" type="button" data-go="' + q.id + '">Go First</button>') + '</div>';
+      }
+      body = extra + '<div class="field"><label for="a-' + q.id + '">' + esc(P.p1) + '</label><textarea id="a-' + q.id + '" data-q="' + q.id + '" data-f="a" rows="3">' + esc(a) + '</textarea></div>' +
+        '<div class="field"><label for="b-' + q.id + '">' + esc(P.p2) + (go ? '' : ' <small>(optional)</small>') + '</label><textarea id="b-' + q.id + '" data-q="' + q.id + '" data-f="b" rows="2">' + esc(b) + '</textarea></div>' +
         '<div class="qact">' + (ed
-          ? '<button class="btn" type="button" data-save="' + q.id + '"' + (a.trim() ? '' : ' disabled') + '>Save changes</button><button class="lnk" type="button" data-cancel="' + q.id + '">Cancel</button>'
-          : '<span class="hint">Answer the first question to finish.</span><button class="btn" type="button" data-done="' + q.id + '"' + (a.trim() ? '' : ' disabled') + '>Complete <small>+' + QXP + ' XP</small></button>') + '</div>';
+          ? '<button class="btn" type="button" data-save="' + q.id + '"' + (a.trim() && (!go || b.trim()) ? '' : ' disabled') + '>Save changes</button><button class="lnk" type="button" data-cancel="' + q.id + '">Cancel</button>'
+          : '<span class="hint">' + (go ? 'Answer both to finish.' : 'Answer the first question to finish.') + '</span><button class="btn" type="button" data-done="' + q.id + '"' + (a.trim() && (!go || b.trim()) ? '' : ' disabled') + '>' + (go ? 'Plan it' : 'Complete') + ' <small>+' + QXP + ' XP</small></button>') + '</div>';
     }
     const subline = done ? esc(ans.a).slice(0, 140) : esc(q.sub);
-    return '<div class="qrow' + (done ? ' done' : '') + (open ? ' open' : '') + '" data-row="' + q.id + '">' +
+    return '<div class="qrow' + (done ? ' done' : '') + (open ? ' open' : '') + (go ? ' go' : '') + '" data-row="' + q.id + '">' +
       '<button class="qtog" type="button" data-tog="' + q.id + '" aria-expanded="' + open + '">' + icon(q.ic, 'm' + (animNext === q.id ? ' rolling' : '')) +
       '<span class="qnm"><small>' + q.stat + '</small><b>' + esc(q.name) + '</b><span>' + subline + '</span></span>' +
       '<span class="qchip">' + (done ? '✓ +' + QXP : QXP + ' XP') + '</span></button>' +
       '<div class="qbody">' + body + '</div></div>';
   }).join('');
   animNext = null;
+  const PL = planOf(t), F = PL && day.f;
+  $('planned').innerHTML = PL ? '<div class="dare go plan"><i>You planned this · ' + esc(QBY[PL.id].name) + '</i> ' +
+    '<div class="ans"><i>' + esc(GOP.p1) + '</i><p>' + esc(PL.a) + '</p></div>' +
+    (PL.b ? '<div class="ans"><i>' + esc(GOP.p2) + '</i><p>' + esc(PL.b) + '</p></div>' : '') +
+    '<div class="yqx">' + (F ? '<span class="hint">Done. +' + FOLLOW_XP + ' XP for following through.</span><button class="lnk" type="button" data-fundo="1">Undo</button>'
+      : '<button class="btn" type="button" data-follow="1">Done it <small>+' + FOLLOW_XP + ' XP</small></button>') + '</div></div>' : '';
+  const FH = day.fh, open = QUESTS.filter(q => !isDone(t, q.id));
+  $('force').innerHTML = FH ? '<div class="dare force"><i>Force my Hand · ' + esc(QBY[FH.id].name) + (isDone(t, FH.id) ? ' · done' : '') + '</i>' + esc(DARES[FH.id][FH.i]) +
+      (!isDone(t, FH.id) && FH.n < 2 && open.length ? '<div class="yqx"><button class="lnk" type="button" data-force="1">Reroll (1 left)</button></div>' : '') + '</div>'
+    : open.length ? '<div class="yqx"><button class="btn ghost" type="button" data-force="1">Force my Hand</button><span class="hint">Nothing came up? Roll a dare.</span></div>' : '';
   $('clearnote').innerHTML = n >= QUESTS.length ? '<div class="cleared-note">Full clear. All three done today.</div>'
     : n >= CLEAR_AT ? '<div class="cleared-note">Day cleared. The streak is safe. The third quest is a bonus.</div>' : '';
 }
@@ -798,7 +851,7 @@ $('qlist').addEventListener('input', e => {
   const ta = e.target.closest('textarea[data-q]'); if (!ta) return;
   const id = ta.dataset.q, t = today(), row = ta.closest('.qrow');
   const a = row.querySelector('textarea[data-f="a"]').value;
-  const btn = row.querySelector('[data-done], [data-save]'); if (btn) btn.disabled = !a.trim();
+  const btn = row.querySelector('[data-done], [data-save]'); if (btn) btn.disabled = !a.trim() || (row.classList.contains('go') && !row.querySelector('textarea[data-f="b"]').value.trim());
   if (editing.has(id)) return;
   const d = dayOf(t); d.d = d.d || {}; d.d[id] = d.d[id] || {}; d.d[id][ta.dataset.f] = ta.value;
   clearTimeout(draftTimer); draftTimer = setTimeout(save, 300);
@@ -808,10 +861,19 @@ $('qlist').addEventListener('click', e => {
   const t = today();
   if (b.dataset.tog) { const id = b.dataset.tog; openRows.has(id) ? openRows.delete(id) : (openRows.add(id), animNext = id); undoArm = null; renderToday(); return; }
   if (b.dataset.done) return complete(b.dataset.done);
+  if (b.dataset.go) {
+    const id = b.dataset.go, d = dayOf(t); if (goUsed(t, id)) return;
+    d.d = d.d || {}; const o = d.d[id] || {}; d.d[id] = {go:1, a:'', b:'', sa:o.a || '', sb:o.b || ''};
+    save(); renderToday(); const ta = $('a-' + id); if (ta) ta.focus(); return;
+  }
+  if (b.dataset.gooff) {
+    const id = b.dataset.gooff, d = dayOf(t); d.d = d.d || {}; const o = d.d[id] || {};
+    d.d[id] = {a:o.sa || '', b:o.sb || ''}; save(); renderToday(); return;
+  }
   if (b.dataset.edit) { editing.add(b.dataset.edit); renderToday(); const ta = $('a-' + b.dataset.edit); if (ta) ta.focus(); return; }
   if (b.dataset.cancel) { editing.delete(b.dataset.cancel); renderToday(); return; }
   if (b.dataset.save) {
-    const id = b.dataset.save, a = $('a-' + id).value.trim(), bb = $('b-' + id).value.trim(); if (!a) return;
+    const id = b.dataset.save, a = $('a-' + id).value.trim(), bb = $('b-' + id).value.trim(); if (!a || (dayOf(t).q[id].go && !bb)) return;
     const d = dayOf(t); d.q[id] = Object.assign({}, d.q[id], {a, b:bb, edited:Date.now()});
     editing.delete(id); save(); renderAll(); showToast('Answer saved', QBY[id].name, 'save'); return;
   }
@@ -819,19 +881,23 @@ $('qlist').addEventListener('click', e => {
     const id = b.dataset.undo;
     if (undoArm !== id) { undoArm = id; renderToday(); return; }
     undoArm = null; const d = dayOf(t), old = d.q[id];
-    d.d = d.d || {}; d.d[id] = {a:old.a, b:old.b || ''}; delete d.q[id];
+    d.d = d.d || {}; d.d[id] = old.go ? {go:1, a:old.a, b:old.b || ''} : {a:old.a, b:old.b || ''}; delete d.q[id];
     save(); renderAll(); return;
   }
 });
 function complete(id){
   const t = today(), a = $('a-' + id).value.trim(), b = $('b-' + id).value.trim(); if (!a) return;
+  const dd = (S.days[t] && S.days[t].d && S.days[t].d[id]) || {}, go = !!dd.go;
+  if (go && (!b || goUsed(t, id))) return;
   const xp0 = totalXP(), lv0 = levelOf(xp0).n, n0 = doneCount(t);
-  const d = dayOf(t); d.q[id] = {a, b, at:Date.now()}; if (d.d) delete d.d[id];
+  const d = dayOf(t); d.q[id] = {a, b, at:Date.now()}; if (go) d.q[id].go = 1;
+  if (d.fh && d.fh.id === id && !go) d.q[id].dare = d.fh.i; if (d.d) delete d.d[id];
   save();
   openRows.delete(id); const nxt = QUESTS.find(q => !isDone(t, q.id)); if (nxt) openRows.add(nxt.id);
   animNext = id; renderAll();
   const tb = $('todaybar'); tb.classList.remove('bump'); void tb.offsetWidth; tb.classList.add('bump');
   showToast(QBY[id].name + ' complete', '+' + QXP + ' XP', id);
+  if (go) showToast('Go First', 'Your plan is waiting at the top of Today tomorrow', 'save');
   const n1 = doneCount(t);
   if (n0 < CLEAR_AT && n1 >= CLEAR_AT) { const st = streakNow(); showToast('Day cleared', 'Streak ' + st + (st === 1 ? ' day' : ' days'), 'day'); }
   else if (n1 === QUESTS.length) showToast('Full clear', 'All three quests today', 'streak');
@@ -980,8 +1046,8 @@ function renderJournal(){
   $('journal').innerHTML = ks.length ? ks.slice(0, jShow).map((k, i) => {
     const d = S.days[k];
     return '<details class="jday"' + (i === 0 ? ' open' : '') + '><summary><span>' + esc(fmtShort(k)) + '</span><small class="' + (cleared(k) ? 'c' : '') + '">' + doneCount(k) + ' of 3' + (cleared(k) ? ' · cleared' : '') + '</small></summary><div class="jb">' +
-      QUESTS.filter(q => isDone(k, q.id)).map(q => '<p class="jq">' + esc(q.name) + '</p><div class="ans"><i>' + esc(q.p1) + '</i><p>' + esc(d.q[q.id].a) + '</p></div>' +
-        (d.q[q.id].b ? '<div class="ans"><i>' + esc(q.p2) + '</i><p>' + esc(d.q[q.id].b) + '</p></div>' : '')).join('') + '</div></details>';
+      QUESTS.filter(q => isDone(k, q.id)).map(q => { const P = d.q[q.id].go ? GOP : q; return '<p class="jq">' + esc(q.name) + (d.q[q.id].go ? ' · Go First' : '') + '</p><div class="ans"><i>' + esc(P.p1) + '</i><p>' + esc(d.q[q.id].a) + '</p></div>' +
+        (d.q[q.id].b ? '<div class="ans"><i>' + esc(P.p2) + '</i><p>' + esc(d.q[q.id].b) + '</p></div>' : ''); }).join('') + '</div></details>';
   }).join('') : '<p class="empty">Your answers will collect here.</p>';
   $('jmore').hidden = ks.length <= jShow;
 }
@@ -1022,8 +1088,9 @@ $('jt').addEventListener('click', () => {
     const d = S.days[k];
     out += fmtLong(k) + ' ' + k.slice(0, 4) + (cleared(k) ? ' (cleared)' : '') + '\n';
     QUESTS.filter(q => isDone(k, q.id)).forEach(q => {
-      out += '\n  ' + q.name + '\n  ' + q.p1 + '\n  ' + d.q[q.id].a.replace(/\n/g, '\n  ') + '\n';
-      if (d.q[q.id].b) out += '  ' + q.p2 + '\n  ' + d.q[q.id].b.replace(/\n/g, '\n  ') + '\n';
+      const P = d.q[q.id].go ? GOP : q;
+      out += '\n  ' + q.name + (d.q[q.id].go ? ' (Go First)' : '') + '\n  ' + P.p1 + '\n  ' + d.q[q.id].a.replace(/\n/g, '\n  ') + '\n';
+      if (d.q[q.id].b) out += '  ' + P.p2 + '\n  ' + d.q[q.id].b.replace(/\n/g, '\n  ') + '\n';
     });
     out += '\n';
   });
@@ -2574,7 +2641,7 @@ const aan = w => (/^[AEIOU]/i.test(w) ? 'an ' : 'a ') + w;
 /* ---------- skills: OSRS XP curve divided by 1000 (99 = 13,034 XP) ---------- */
 const XPT = [0, 0]; { let pts = 0; for (let l = 1; l < 99; l++) { pts += Math.floor(l + 300 * Math.pow(2, l / 7)); XPT[l + 1] = Math.floor(pts / 4) / 1000; } }
 const SK = [{id:'yes', name:'Yes', ic:'adventure'}, {id:'unc', name:'Nerve', ic:'tavern'}, {id:'chance', name:'Luck', ic:'dice'}];
-const skXP = id => dayKeys().reduce((x, k) => x + (isDone(k, id) ? QXP : 0), 0);
+const skXP = id => dayKeys().reduce((x, k) => x + (isDone(k, id) ? QXP : 0) + fBonus(k, id), 0);
 const skLv = xp => { let L = 1; for (let l = 2; l <= 99; l++) if (xp >= XPT[l]) L = l; return L; };
 const fmt = n => Math.round(n).toLocaleString('en-AU');
 
@@ -2821,11 +2888,32 @@ window.complete = function(id){
 };
 const _toast = showToast;
 window.showToast = function(title, sub, kind){ if (kind === 'level' || kind === 'day' || QBY[kind]) return; _toast(title, sub, kind); };
+/* Force my Hand: one dare from any quest not yet done today, one reroll a day */
+$('force').addEventListener('click', e => {
+  const b = e.target.closest('[data-force]'); if (!b) return;
+  const t = today(), d = dayOf(t), F = d.fh;
+  if (F && (F.n >= 2 || isDone(t, F.id))) return;
+  const pool = []; QUESTS.forEach(q => { if (!isDone(t, q.id)) DARES[q.id].forEach((_, i) => { if (!(F && F.id === q.id && F.i === i)) pool.push({id:q.id, i}); }); });
+  if (!pool.length) return;
+  const r = pool[Math.floor(Math.random() * pool.length)];
+  d.fh = {id:r.id, i:r.i, n:(F ? F.n : 0) + 1}; save();
+  openRows.clear(); openRows.add(r.id); animNext = r.id; renderToday();
+  const row = document.querySelector('[data-row="' + r.id + '"]'); if (row) row.scrollIntoView({behavior:'smooth', block:'center'});
+});
+/* "You planned this": follow through for a bonus */
+$('planned').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const t = today(), P = planOf(t); if (!P) return;
+  if (b.dataset.follow) { dayOf(t).f = {id:P.id, at:Date.now()}; save(); renderAll(); xpDrop(FOLLOW_XP, QBY[P.id].ic); setTimeout(() => { if (!mBusy) play('tick'); }, 0); _toast('Followed through', '+' + FOLLOW_XP + ' XP', 'save'); }
+  if (b.dataset.fundo) { delete dayOf(t).f; save(); renderAll(); }
+});
 /* the level badge opens an examine box with the title's flavour line */
 $('lvl').addEventListener('click', () => { const L = levelOf(totalXP()); _toast(L.t, L.s, 'level'); });
 
 /* ---------- house rules: describe the new colours and tabs ---------- */
 document.querySelectorAll('#rulessec .rules li').forEach(li => { if (/countdown runs/.test(li.textContent)) li.innerHTML = 'The countdown runs to 31 December. Every square is a day: green for cleared, yellow for one quest.'; });
+$('rulessec').querySelector('.rules').insertAdjacentHTML('beforeend', '<li><b>Force my Hand:</b> nothing came up? Roll a dare from any quest you have not done today. One reroll a day.</li>' +
+  '<li><b>Go First:</b> plan tomorrow\u2019s quest today. It completes that quest for today, once a day, so plans alone never clear a day. Tomorrow the plan sits at the top of Today; follow through for +' + FOLLOW_XP + ' XP.</li>');
 $('rulessec').querySelector('.rules').insertAdjacentHTML('beforeend', '<li>Each quest also trains a skill: <b>Yes</b>, <b>Nerve</b> or <b>Luck</b>. See the Skills tab. Diaries and the Collection log fill themselves from your days.</li>');
 
 /* ---------- start: seed silently, so nothing already earned is announced again ---------- */
